@@ -8,15 +8,15 @@ import atexit
 import signal
 import threading
 
-from sense_hat import SenseHat
-
+from sense_hat import SenseHat, ACTION_PRESSED, ACTION_HELD, ACTION_RELEASED
 
 class SensorData():
-	def __init__(self, x, y, z):
+	def __init__(self, x, y, z, reset):
 		self.x = x
 		self.y = y
 		self.z = z
-		self.readingTime = datetime.datetime.now().isoformat()
+		self.time = int(round(time.time() * 1000))
+		self.reset = reset
 
 	def asJSON(self):
 		return json.dumps(vars(self), sort_keys=True, indent=4)
@@ -27,11 +27,10 @@ privateKeyPath = "certs/mypi.private.key"
 certificatePath = "certs/mypi.cert.pem"
 rootCAPath="certs/root-CA.crt"
 host="data.iot.eu-west-1.amazonaws.com"
+CLOCK_SECS = 2
 
-sense = SenseHat()
-sense.clear()
-sense.set_imu_config(True, True, True)
 
+##### MQTT client
 # Init AWSIoTMQTTClient
 client = None
 client = AWSIoTMQTTClient("basicPubSub")
@@ -48,16 +47,48 @@ client.configureMQTTOperationTimeout(5)  # 5 sec
 # Connect and subscribe to AWS IoT
 client.connect()
 
+
+### main object
+
+sense = SenseHat()
+sense.clear()
+sense.set_imu_config(True, True, True)
+
+started = False
+
+
+def startPublish(value, min_value=0, max_value=7):
+	global started
+	if not started:
+		sense.show_message("*")
+		raw = sense.get_accelerometer_raw()
+		publish(SensorData(raw["x"], raw["y"], raw["z"], True))
+		started = True
+
+def stopPublish(value, min_value=0, max_value=7):
+	global started
+	if started:
+		sense.show_message("bye")
+		raw = sense.get_accelerometer_raw()
+		publish(SensorData(raw["x"], raw["y"], raw["z"], True))
+		started = False
+
+
+def publish(sensorData):
+	jsonData = sensorData.asJSON()
+	client.publish("sensordata/%s" % clientId, jsonData, 1)
+	print(jsonData)
+
+sense.stick.direction_middle = startPublish
+sense.stick.direction_up = stopPublish
+
 # --- main loop ---
+print("starting main loop")
 while True:
-    time.sleep(1)
+    time.sleep(CLOCK_SECS)
 
-    raw = sense.get_accelerometer_raw()
-    print("x: {x}, y: {y}, z: {z}".format(**raw))
+    if started:
+    	raw = sense.get_accelerometer_raw()
+    	print("x: {x}, y: {y}, z: {z}".format(**raw))
+	publish(SensorData(raw["x"], raw["y"], raw["z"], False))
 
-    #orientation = sense.get_orientation_degrees()
-    #print("p: {pitch}, r: {roll}, y: {yaw}".format(**orientation))
-
-    jsonData = SensorData(raw["x"], raw["y"], raw["z"]).asJSON()
-    print(jsonData)
-    client.publish("sensordata/%s" % clientId, jsonData, 1)
