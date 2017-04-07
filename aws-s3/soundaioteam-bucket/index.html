@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8">
+    <title>Music</title>
+    <script src="music.js"></script>
+    <script src="aws-sqs.js"></script>
+  </head>
+  <body>
+    <img src="music.png" style="max-width: 100%" />
+    <script>
+      var music = Music.create({
+        type: 'square'
+      });
+
+      AWS.config.update({
+        accessKeyId: 'AKIAIOMWB2O5CHDZWEUA',
+        secretAccessKey: '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'
+      });
+
+      const QUEUE_URL = 'https://sqs.eu-west-1.amazonaws.com/271826041478/sounds';
+      const sqs = new AWS.SQS({
+        region : 'eu-west-1',
+        params: {
+          QueueUrl: QUEUE_URL
+        }
+      });
+
+      window.min = 400;
+      window.max = 5000;
+
+      setInterval(function () {
+        sqs.receiveMessage(function(err, data) {
+              if (err) {
+                  console.log('error:',"Fail Send Message" + err);
+              } else {
+                  console.log(data);
+                  music.start();
+
+                  const messages = data.Messages;
+
+                  if (messages.length > 0) {
+                    const message = JSON.parse(messages[0].Body);
+
+                    var frequency = (message.y / 10) * window.max + window.min;
+
+                    music.playTone(frequency, 1);
+
+                    sqs.deleteMessage({
+                      QueueUrl: QUEUE_URL,
+                      ReceiptHandle: message.ReceiptHandle
+                    });
+                  } else {
+                    music.stop();
+                  }
+              }
+        });
+      }, 500)
+    </script>
+  </body>
+</html>

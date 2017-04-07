@@ -1,0 +1,4 @@
+SELECT reset, x, y, z, time FROM 'sensordata/am'
+
+
+Invoke a Lambda function passing the message data: test_iot_fn
